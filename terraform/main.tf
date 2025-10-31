@@ -1,26 +1,27 @@
+###############################################################
+# Provider
+###############################################################
 provider "aws" {
   region = var.aws_region
 }
 
-# -------------------------------------------------------
-# Detect if IAM role already exists
-# -------------------------------------------------------
-data "aws_iam_roles" "all_roles" {}
+###############################################################
+# Detect if role exists
+###############################################################
+data "aws_iam_roles" "all" {}
 
 locals {
-  existing_lambda_role = [
-    for role_name in data.aws_iam_roles.all_roles.names : role_name
-    if role_name == "databricks_lambda_role"
-  ]
+  existing_lambda_role = contains(data.aws_iam_roles.all.names, "databricks_lambda_role")
 }
 
-# -------------------------------------------------------
-# Create IAM role only if it does not exist
-# -------------------------------------------------------
+###############################################################
+# Create IAM role only if it doesn't exist
+###############################################################
 resource "aws_iam_role" "lambda_role" {
-  count = length(local.existing_lambda_role) == 0 ? 1 : 0
+  count = local.existing_lambda_role ? 0 : 1
 
   name = "databricks_lambda_role"
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -31,24 +32,22 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-# -------------------------------------------------------
-# Get current AWS account info for ARN building
-# -------------------------------------------------------
 data "aws_caller_identity" "current" {}
 
-# -------------------------------------------------------
-# Unified role references (works for both existing or new)
-# -------------------------------------------------------
+# unified references
 locals {
-  lambda_role_name = length(local.existing_lambda_role) > 0 ? "databricks_lambda_role" : aws_iam_role.lambda_role[0].name
-  lambda_role_arn  = length(local.existing_lambda_role) > 0 ?
-    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/databricks_lambda_role" :
-    aws_iam_role.lambda_role[0].arn
+  lambda_role_name = local.existing_lambda_role
+    ? "databricks_lambda_role"
+    : aws_iam_role.lambda_role[0].name
+
+  lambda_role_arn = local.existing_lambda_role
+    ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/databricks_lambda_role"
+    : aws_iam_role.lambda_role[0].arn
 }
 
-# -------------------------------------------------------
+###############################################################
 # CloudWatch logging policy
-# -------------------------------------------------------
+###############################################################
 resource "aws_iam_role_policy" "lambda_logs" {
   name = "lambda_logging"
   role = local.lambda_role_name
@@ -67,9 +66,9 @@ resource "aws_iam_role_policy" "lambda_logs" {
   })
 }
 
-# -------------------------------------------------------
+###############################################################
 # Lambda function
-# -------------------------------------------------------
+###############################################################
 resource "aws_lambda_function" "databricks_lambda" {
   function_name = "databricks_lambda_function"
   handler       = "main.lambda_handler"
@@ -87,9 +86,9 @@ resource "aws_lambda_function" "databricks_lambda" {
   }
 }
 
-# -------------------------------------------------------
-# API Gateway HTTP API integration
-# -------------------------------------------------------
+###############################################################
+# API Gateway HTTP API
+###############################################################
 resource "aws_apigatewayv2_api" "lambda_api" {
   name          = "databricks_lambda_api"
   protocol_type = "HTTP"
@@ -113,6 +112,9 @@ resource "aws_apigatewayv2_stage" "lambda_stage" {
   auto_deploy = true
 }
 
-# -------------------------------------------------------
-# Output: API endpoint URL
-# --------------------------------
+###############################################################
+# Output
+###############################################################
+output "invoke_url" {
+  value = "${aws_apigatewayv2_stage.lambda_stage.invoke_url}/query"
+}
