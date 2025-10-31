@@ -6,22 +6,22 @@ provider "aws" {
 }
 
 ###############################################################
-# Detect if role exists
+# Detect if IAM role already exists
 ###############################################################
 data "aws_iam_roles" "all" {}
 
 locals {
+  # true if role already present
   existing_lambda_role = contains(data.aws_iam_roles.all.names, "databricks_lambda_role")
 }
 
 ###############################################################
-# Create IAM role only if it doesn't exist
+# Create IAM role only if it does not exist
 ###############################################################
 resource "aws_iam_role" "lambda_role" {
   count = local.existing_lambda_role ? 0 : 1
 
   name = "databricks_lambda_role"
-
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -34,15 +34,12 @@ resource "aws_iam_role" "lambda_role" {
 
 data "aws_caller_identity" "current" {}
 
-# unified references
+###############################################################
+# Unified references (single-line ternaries — syntax safe)
+###############################################################
 locals {
-  lambda_role_name = local.existing_lambda_role
-    ? "databricks_lambda_role"
-    : aws_iam_role.lambda_role[0].name
-
-  lambda_role_arn = local.existing_lambda_role
-    ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/databricks_lambda_role"
-    : aws_iam_role.lambda_role[0].arn
+  lambda_role_name = local.existing_lambda_role ? "databricks_lambda_role" : aws_iam_role.lambda_role[0].name
+  lambda_role_arn  = local.existing_lambda_role ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/databricks_lambda_role" : aws_iam_role.lambda_role[0].arn
 }
 
 ###############################################################
