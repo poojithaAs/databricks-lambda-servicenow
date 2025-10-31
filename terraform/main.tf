@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 # -------------------------------------------------------
-# Detect if the IAM role already exists
+# Detect if IAM role already exists
 # -------------------------------------------------------
 data "aws_iam_roles" "all_roles" {}
 
@@ -15,7 +15,7 @@ locals {
 }
 
 # -------------------------------------------------------
-# Create the IAM role only if it does not exist
+# Create IAM role only if it does not exist
 # -------------------------------------------------------
 resource "aws_iam_role" "lambda_role" {
   count = length(local.existing_lambda_role) == 0 ? 1 : 0
@@ -31,18 +31,19 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
+# -------------------------------------------------------
 # Get current AWS account info for ARN building
+# -------------------------------------------------------
 data "aws_caller_identity" "current" {}
 
+# -------------------------------------------------------
 # Unified role references (works for both existing or new)
+# -------------------------------------------------------
 locals {
-  lambda_role_name = length(local.existing_lambda_role) > 0
-    ? "databricks_lambda_role"
-    : aws_iam_role.lambda_role[0].name
-
-  lambda_role_arn = length(local.existing_lambda_role) > 0
-    ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/databricks_lambda_role"
-    : aws_iam_role.lambda_role[0].arn
+  lambda_role_name = length(local.existing_lambda_role) > 0 ? "databricks_lambda_role" : aws_iam_role.lambda_role[0].name
+  lambda_role_arn  = length(local.existing_lambda_role) > 0 ?
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/databricks_lambda_role" :
+    aws_iam_role.lambda_role[0].arn
 }
 
 # -------------------------------------------------------
@@ -114,7 +115,4 @@ resource "aws_apigatewayv2_stage" "lambda_stage" {
 
 # -------------------------------------------------------
 # Output: API endpoint URL
-# -------------------------------------------------------
-output "invoke_url" {
-  value = "${aws_apigatewayv2_stage.lambda_stage.invoke_url}/query"
-}
+# --------------------------------
