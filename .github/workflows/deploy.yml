@@ -14,12 +14,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      # Global environment variables
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      # Terraform expects these names with TF_VAR_ prefix
+      TF_VAR_databricks_host: ${{ secrets.DATABRICKS_HOST }}
+      TF_VAR_databricks_http_path: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      TF_VAR_databricks_token: ${{ secrets.DATABRICKS_TOKEN }}
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -31,17 +43,21 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
 
       - name: Terraform Init
-        run: cd terraform && terraform init
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Debug Env (optional, safe)
+        run: |
+          echo "Host: $DATABRICKS_HOST"
+          echo "HTTP Path: $DATABRICKS_HTTP_PATH"
+          echo "Token length: ${#DATABRICKS_TOKEN}"
 
       - name: Terraform Apply
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
           cd terraform
           terraform apply -auto-approve
