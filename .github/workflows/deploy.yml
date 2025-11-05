@@ -1,52 +1,43 @@
-name: Deploy Databricks Lambda Integration
+name: Secure Deploy Lambda via Terraform
 
 on:
   push:
-    branches: [ "main" ]   # Trigger deployment when code is pushed to main
+    branches: [ "main" ]
 
 permissions:
   contents: read
-  id-token: write           # Needed for OIDC authentication to AWS
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout code
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-      # 2️⃣ Package the Lambda function
       - name: Package Lambda
         run: |
           cd lambda
           pip install -r requirements.txt -t .
           zip -r lambda_package.zip .
-          cd ..
+          mv lambda_package.zip ../terraform/
 
-      # 3️⃣ Configure AWS credentials via OIDC
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::126667739830:role/TerraformGitHubDeploymentPolicy
           aws-region: us-east-1
 
-
-      # 4️⃣ Setup Terraform
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
+        uses: hashicorp/setup-terraform@v3
 
-      # 5️⃣ Initialize and apply Terraform
-      - name: Deploy infrastructure
+      - name: Deploy Infrastructure
         run: |
           cd terraform
           terraform init
-          terraform apply -auto-approve -var-file="dev.tfvars"
+          terraform apply -auto-approve -var-file=dev.tfvars
 
-      # 6️⃣ Display the API Gateway endpoint
       - name: Output API Gateway URL
         run: |
           cd terraform
