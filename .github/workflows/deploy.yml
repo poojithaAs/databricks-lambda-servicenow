@@ -1,63 +1,65 @@
-name: Secure Deploy Lambda via Terraform
+name: Deploy Lambda Databricks Integration
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     env:
-      # Global environment variables
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_JOB_ID: ${{ secrets.DATABRICKS_JOB_ID }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      # Terraform expects these names with TF_VAR_ prefix
-      TF_VAR_databricks_host: ${{ secrets.DATABRICKS_HOST }}
-      TF_VAR_databricks_http_path: ${{ secrets.DATABRICKS_HTTP_PATH }}
-      TF_VAR_databricks_token: ${{ secrets.DATABRICKS_TOKEN }}
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.9'
 
-      - name: Package Lambda
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install Lambda dependencies
         run: |
           cd lambda
           pip install -r requirements.txt -t .
           zip -r ../lambda.zip .
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.0
 
       - name: Terraform Init
         run: |
           cd terraform
           terraform init
 
-      - name: Debug Env (optional, safe)
-        run: |
-          echo "Host: $DATABRICKS_HOST"
-          echo "HTTP Path: $DATABRICKS_HTTP_PATH"
-          echo "Token length: ${#DATABRICKS_TOKEN}"
-
       - name: Terraform Apply
         run: |
           cd terraform
-          terraform apply -auto-approve
+          terraform apply -auto-approve \
+            -var "region=${{ secrets.AWS_REGION }}" \
+            -var "databricks_host=${{ secrets.DATABRICKS_HOST }}" \
+            -var "job_id=${{ secrets.DATABRICKS_JOB_ID }}" \
+            -var "databricks_token=${{ secrets.DATABRICKS_TOKEN }}"
+
+      - name: Output Deployment Info
+        run: |
+          cd terraform
+          terraform output
