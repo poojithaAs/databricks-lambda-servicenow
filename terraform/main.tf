@@ -9,25 +9,14 @@ provider "aws" {
 }
 
 # ------------------------------------------------------
-# 1️⃣ AWS Secrets Manager — store Databricks credentials
+# 1️⃣ Reference existing AWS Secrets Manager secret
 # ------------------------------------------------------
-resource "aws_secretsmanager_secret" "databricks_secret" {
-  name        = "${var.project_name}-databricks-secret"
-  description = "Databricks credentials for Lambda integration"
-}
-
-resource "aws_secretsmanager_secret_version" "databricks_secret_value" {
-  secret_id = aws_secretsmanager_secret.databricks_secret.id
-
-  secret_string = jsonencode({
-    DATABRICKS_URL   = var.databricks_url
-    DATABRICKS_TOKEN = var.databricks_token
-    DATABRICKS_JOB_ID = var.databricks_job_id
-  })
+data "aws_secretsmanager_secret" "databricks_secret" {
+  name = var.databricks_secret_name
 }
 
 # ------------------------------------------------------
-# 2️⃣ IAM Role and Policies for Lambda
+# 2️⃣ IAM Role and Policy for Lambda
 # ------------------------------------------------------
 resource "aws_iam_role" "lambda_role" {
   name_prefix = "${var.project_name}-lambda-role-"
@@ -44,7 +33,7 @@ resource "aws_iam_role" "lambda_role" {
 
 resource "aws_iam_policy" "lambda_policy" {
   name_prefix = "${var.project_name}-lambda-policy-"
-  description = "Permissions for Lambda to access Secrets Manager, VPC, CloudWatch"
+  description = "Permissions for Lambda to access Secrets Manager, CloudWatch, and VPC"
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -70,7 +59,7 @@ resource "aws_iam_role_policy_attachment" "lambda_attach" {
 }
 
 # ------------------------------------------------------
-# 3️⃣ Lambda Function — inside your existing VPC
+# 3️⃣ Lambda Function (in existing VPC)
 # ------------------------------------------------------
 resource "aws_lambda_function" "databricks_lambda" {
   function_name = "${var.project_name}-lambda"
@@ -84,7 +73,7 @@ resource "aws_lambda_function" "databricks_lambda" {
 
   environment {
     variables = {
-      DATABRICKS_SECRET_NAME = aws_secretsmanager_secret.databricks_secret.name
+      DATABRICKS_SECRET_NAME = data.aws_secretsmanager_secret.databricks_secret.name
     }
   }
 
@@ -95,7 +84,7 @@ resource "aws_lambda_function" "databricks_lambda" {
 }
 
 # ------------------------------------------------------
-# 4️⃣ API Gateway → Lambda Integration
+# 4️⃣ API Gateway Integration
 # ------------------------------------------------------
 resource "aws_apigatewayv2_api" "lambda_api" {
   name          = "${var.project_name}-api"
@@ -124,7 +113,7 @@ resource "aws_lambda_permission" "allow_apigw" {
 }
 
 # ------------------------------------------------------
-# 5️⃣ Output API Gateway URL
+# 5️⃣ Output
 # ------------------------------------------------------
 output "api_gateway_url" {
   value = aws_apigatewayv2_api.lambda_api.api_endpoint
