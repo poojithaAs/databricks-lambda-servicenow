@@ -1,19 +1,20 @@
-variable "aws_region" { default = "us-east-1" }
-variable "project_name" { default = "servicenow-databricks" }
+variable "aws_region" {
+  description = "AWS region for deployment"
+  default     = "us-east-1"
+}
 
-# Databricks values (used to seed Secrets Manager only)
-variable "databricks_url" {}
-variable "databricks_token" { sensitive = true }
-variable "databricks_job_id" {}
+variable "project_name" {
+  description = "Prefix for all resource names"
+  default     = "servicenow-databricks"
+}
 
-# Existing VPC details
-variable "vpc_id" {
-  description = "Existing VPC ID"
+variable "databricks_secret_name" {
+  description = "Name of existing AWS Secrets Manager secret"
   type        = string
 }
 
 variable "subnet_ids" {
-  description = "List of private subnet IDs"
+  description = "Private subnet IDs for Lambda"
   type        = list(string)
 }
 
