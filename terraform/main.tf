@@ -65,11 +65,6 @@ resource "aws_lambda_function" "databricks_lambda" {
   filename         = "${path.module}/../lambda/lambda_package.zip"
   source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
 
-  vpc_config {
-    subnet_ids         = var.subnet_ids
-    security_group_ids = var.security_group_ids
-  }
-
   environment {
     variables = {
       DATABRICKS_URL   = var.databricks_url
