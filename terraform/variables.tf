@@ -1,16 +1,11 @@
-variable "region" {
-  default = "us-east-1"
+variable "aws_region" {}
+variable "project_name" {}
+variable "subnet_ids" {
+  type = list(string)
 }
-
-variable "databricks_host" {
-  description = "Databricks workspace base URL"
+variable "security_group_ids" {
+  type = list(string)
 }
-
-variable "job_id" {
-  description = "Databricks Job ID"
-}
-
-variable "databricks_token" {
-  description = "Databricks PAT token"
-  sensitive   = true
-}
+variable "databricks_url" {}
+variable "databricks_token" {}
+variable "databricks_job_id" {}
