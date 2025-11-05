@@ -23,7 +23,7 @@ jobs:
           zip -r lambda_package.zip .
           mv lambda_package.zip ../terraform/
 
-      - name: Configure AWS Credentials via OIDC
+      - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::126667739830:role/TerraformGitHubDeploymentPolicy
@@ -36,7 +36,7 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform apply -auto-approve -var-file=dev.tfvars
+          terraform apply -auto-approve -var-file="dev.tfvars"
 
       - name: Output API Gateway URL
         run: |
