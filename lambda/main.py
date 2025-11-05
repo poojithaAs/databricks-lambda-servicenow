@@ -8,10 +8,10 @@ def lambda_handler(event, context):
     secrets_client = boto3.client("secretsmanager")
 
     try:
-        # Secret Name defined in Terraform
+        # Read the secret name from environment variable
         secret_name = os.environ["DATABRICKS_SECRET_NAME"]
 
-        # Retrieve the secret JSON from Secrets Manager
+        # Fetch secret JSON from AWS Secrets Manager
         secret_value = secrets_client.get_secret_value(SecretId=secret_name)
         secrets = json.loads(secret_value["SecretString"])
 
@@ -19,8 +19,8 @@ def lambda_handler(event, context):
         databricks_token = secrets["DATABRICKS_TOKEN"]
         databricks_job_id = secrets["DATABRICKS_JOB_ID"]
 
-        # Trigger Databricks Job
-        resp = http.request(
+        # Trigger Databricks Job API
+        response = http.request(
             "POST",
             f"{databricks_url}/api/2.1/jobs/run-now",
             headers={"Authorization": f"Bearer {databricks_token}"},
@@ -29,7 +29,7 @@ def lambda_handler(event, context):
 
         return {
             "statusCode": 200,
-            "body": resp.data.decode("utf-8")
+            "body": response.data.decode("utf-8")
         }
 
     except Exception as e:
