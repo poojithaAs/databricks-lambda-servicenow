@@ -12,8 +12,18 @@ provider "aws" {
   region = var.aws_region
 }
 
-# IAM Role for Lambda
+# -----------------------------------------------------------------------------
+# 🔹 IAM ROLE for Lambda (Create only if not already existing)
+# -----------------------------------------------------------------------------
+data "aws_iam_role" "existing_lambda_role" {
+  name = "${var.project_name}-lambda-role"
+  # Terraform will skip this lookup if role doesn’t exist yet
+  # (ignore_errors is deprecated, so we use try() for safety in count logic)
+}
+
 resource "aws_iam_role" "lambda_role" {
+  count = try(data.aws_iam_role.existing_lambda_role.name, "") != "" ? 0 : 1
+
   name = "${var.project_name}-lambda-role"
 
   assume_role_policy = jsonencode({
@@ -28,8 +38,28 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-# IAM Policy for Lambda (Databricks + CloudWatch + Secrets)
+# Choose the correct ARN whether it existed or was created
+locals {
+  lambda_role_arn = try(
+    data.aws_iam_role.existing_lambda_role.arn,
+    aws_iam_role.lambda_role[0].arn
+  )
+  lambda_role_name = try(
+    data.aws_iam_role.existing_lambda_role.name,
+    aws_iam_role.lambda_role[0].name
+  )
+}
+
+# -----------------------------------------------------------------------------
+# 🔹 IAM POLICY for Lambda (Create only if not already existing)
+# -----------------------------------------------------------------------------
+data "aws_iam_policy" "existing_lambda_policy" {
+  name = "${var.project_name}-lambda-policy"
+}
+
 resource "aws_iam_policy" "lambda_policy" {
+  count = try(data.aws_iam_policy.existing_lambda_policy.name, "") != "" ? 0 : 1
+
   name        = "${var.project_name}-lambda-policy"
   description = "Permissions for Lambda to access Secrets Manager and CloudWatch"
 
@@ -49,17 +79,30 @@ resource "aws_iam_policy" "lambda_policy" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_policy_attach" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = aws_iam_policy.lambda_policy.arn
+# Choose the correct ARN whether it existed or was created
+locals {
+  lambda_policy_arn = try(
+    data.aws_iam_policy.existing_lambda_policy.arn,
+    aws_iam_policy.lambda_policy[0].arn
+  )
 }
 
-# Lambda Function
+# -----------------------------------------------------------------------------
+# 🔹 IAM Policy Attachment
+# -----------------------------------------------------------------------------
+resource "aws_iam_role_policy_attachment" "lambda_policy_attach" {
+  role       = local.lambda_role_name
+  policy_arn = local.lambda_policy_arn
+}
+
+# -----------------------------------------------------------------------------
+# 🔹 Lambda Function
+# -----------------------------------------------------------------------------
 resource "aws_lambda_function" "databricks_lambda" {
   function_name = "${var.project_name}-lambda"
   handler       = "main.lambda_handler"
   runtime       = "python3.9"
-  role          = aws_iam_role.lambda_role.arn
+  role          = local.lambda_role_arn
   timeout       = 60
 
   filename         = "${path.module}/../lambda/lambda_package.zip"
@@ -72,9 +115,17 @@ resource "aws_lambda_function" "databricks_lambda" {
       JOB_ID           = var.databricks_job_id
     }
   }
+
+  # (Optional) Remove this if not using VPC:
+  # vpc_config {
+  #   subnet_ids         = var.subnet_ids
+  #   security_group_ids = var.security_group_ids
+  # }
 }
 
-# API Gateway
+# -----------------------------------------------------------------------------
+# 🔹 API Gateway
+# -----------------------------------------------------------------------------
 resource "aws_apigatewayv2_api" "lambda_api" {
   name          = "${var.project_name}-api"
   protocol_type = "HTTP"
@@ -101,6 +152,10 @@ resource "aws_lambda_permission" "apigw_lambda" {
   source_arn    = "${aws_apigatewayv2_api.lambda_api.execution_arn}/*/*"
 }
 
+# -----------------------------------------------------------------------------
+# 🔹 Outputs
+# -----------------------------------------------------------------------------
 output "api_gateway_url" {
-  value = aws_apigatewayv2_api.lambda_api.api_endpoint
+  description = "Invoke URL for ServiceNow"
+  value       = aws_apigatewayv2_api.lambda_api.api_endpoint
 }
