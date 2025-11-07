@@ -1,68 +1,60 @@
-import os
 import json
+import os
 import boto3
 import requests
 
-
 def lambda_handler(event, context):
-    """
-    Trigger a Databricks job securely from AWS Lambda.
-    Retrieves Databricks token from Secrets Manager and triggers a Databricks job via REST API.
-    """
-
     try:
-        # --- Environment Variables ---
-        databricks_url = os.environ.get("DATABRICKS_URL", "").rstrip("/")
-        job_id = os.environ.get("DATABRICKS_JOB_ID")
-        secret_name = os.environ.get("DATABRICKS_SECRET_NAME")
-        region = os.environ.get("region") or os.environ.get("AWS_REGION", "us-east-1")
+        # Debug: incoming event
+        print("Received event:", json.dumps(event))
 
-        if not databricks_url or not job_id or not secret_name:
-            raise ValueError("Missing required environment variables.")
+        # Example: extracting Databricks Job ID and payload from event
+        job_id = event.get("job_id") or os.environ.get("DATABRICKS_JOB_ID")
+        token = os.environ.get("DATABRICKS_TOKEN")
+        workspace_url = os.environ.get("DATABRICKS_WORKSPACE_URL")
 
-        # --- Get token from Secrets Manager ---
-        sm = boto3.client("secretsmanager", region_name=region)
-        secret_value = sm.get_secret_value(SecretId=secret_name)
-        creds = json.loads(secret_value["SecretString"])
-        token = creds.get("token")
+        if not all([job_id, token, workspace_url]):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing required configuration"})
+            }
 
-        if not token:
-            raise ValueError("Token key missing in secret value.")
+        # Construct Databricks API endpoint
+        api_url = f"{workspace_url}/api/2.1/jobs/run-now"
 
-        # --- Trigger Databricks Job ---
-        headers = {"Authorization": f"Bearer {token}"}
+        # Trigger Databricks Job
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
         payload = {"job_id": job_id}
+        print("Triggering Databricks Job:", payload)
 
-        response = requests.post(
-            f"{databricks_url}/api/2.1/jobs/run-now",
-            json=payload,
-            headers=headers,
-            timeout=30,
-        )
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
 
-        print(f"[INFO] Databricks Response: {response.status_code} - {response.text}")
+        # Check response
+        if response.status_code != 200:
+            print("Error Response:", response.text)
+            return {
+                "statusCode": response.status_code,
+                "body": json.dumps({"error": response.text})
+            }
+
+        # Success
+        result = response.json()
+        print("Databricks Job triggered:", result)
 
         return {
-            "statusCode": response.status_code,
-            "body": response.text
-        }
-
-    except sm.exceptions.ResourceNotFoundException:
-        print(f"[ERROR] Secret {secret_name} not found in region {region}.")
-        return {
-            "statusCode": 404,
-            "body": json.dumps({"error": f"Secret {secret_name} not found."})
-        }
-
-    except requests.exceptions.RequestException as req_err:
-        print(f"[ERROR] Request to Databricks failed: {req_err}")
-        return {
-            "statusCode": 502,
-            "body": json.dumps({"error": "Databricks API call failed."})
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Databricks Job triggered successfully",
+                "run_id": result.get("run_id")
+            })
         }
 
     except Exception as e:
-        print(f"[ERROR] Lambda execution failed: {e}")
+        print("Exception:", str(e))
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})
